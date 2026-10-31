@@ -2,6 +2,7 @@
 declare module "proper-lockfile" {
 	export interface LockOptions {
 		realpath?: boolean | null;
+		fs?: object;
 		retries?: number | { retries: number; factor: number; minTimeout: number; maxTimeout: number };
 	}
 

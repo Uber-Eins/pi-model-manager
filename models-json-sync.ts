@@ -12,6 +12,7 @@ import {
 	type ExtensionCommandContext,
 } from "@earendil-works/pi-coding-agent";
 import settingsFileLock from "proper-lockfile";
+import nodeFs from "node:fs";
 import { join } from "node:path";
 import { minimatch } from "minimatch";
 import { atomicWriteText } from "./atomic-write.ts";
@@ -281,6 +282,18 @@ function removeEnabledProviderPatterns(patterns: string[], providerId: string): 
 // [喵喵喵]: Bun 编译版 Pi 下 createRequire 无法寻址 proper-lockfile 的传递依赖 graceful-fs，
 // 必须走 ESM 导入让 Node/Bun 的 ESM 解析器接管 (issue #3)
 
+// proper-lockfile 会在传入的 fs 对象上 defineProperty 一个不可写、不可配置的精度缓存；
+// Pi 运行时的 fs 可能是 Proxy，再次读取时违反 Proxy 不变式并抛出未捕获异常。
+// 因此传入一个只含所需方法的普通对象，让缓存落在这里。
+const settingsLockFs = {
+	mkdir: nodeFs.mkdir,
+	stat: nodeFs.stat,
+	utimes: nodeFs.utimes,
+	rmdir: nodeFs.rmdir,
+	realpath: nodeFs.realpath,
+	rmdirSync: nodeFs.rmdirSync,
+};
+
 interface LockedSettingsUpdate {
 	configured: boolean;
 	outcome: EnabledModelUpdate;
@@ -297,6 +310,7 @@ async function updateLockedSettings(
 	}
 	const release = await settingsFileLock.lock(path, {
 		realpath: false,
+		fs: settingsLockFs,
 		retries: { retries: 10, factor: 1, minTimeout: 20, maxTimeout: 20 },
 	});
 	try {
